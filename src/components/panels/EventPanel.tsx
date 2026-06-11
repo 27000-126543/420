@@ -1,25 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
-  X, AlertTriangle, ChevronLeft, Clock, CheckCircle2, XCircle, AlertOctagon, AlertCircle, Minus, MessageSquare, MapPin, User, ThumbsUp, ThumbsDown, Flag, ListOrdered, Wind, Zap, Shield, Link2, Eye,
+  X, AlertTriangle, ChevronLeft, Clock, CheckCircle2, XCircle, AlertOctagon, AlertCircle, Minus, MessageSquare, MapPin, User, ThumbsUp, ThumbsDown, Flag, ListOrdered, Wind, Zap, Shield, Link2, Eye, Send, CalendarDays, Filter, RotateCcw,
 } from 'lucide-react'
 import { useCityStore } from '@/store/useCityStore'
-import type { CityEvent, EventStatus, EventActionLog, EnvMetricKey } from '@/types'
-
-type FilterKey = 'all' | 'pending' | 'processing' | 'resolved'
-
-const filterMap: Record<FilterKey, (e: CityEvent) => boolean> = {
-  all: () => true,
-  pending: (e) => e.status === 'detected' || e.status === 'reported' || e.status === 'returned',
-  processing: (e) => e.status === 'assigned' || e.status === 'processing',
-  resolved: (e) => e.status === 'resolved',
-}
-
-const filterLabels: Record<FilterKey, string> = {
-  all: '全部',
-  pending: '待处理',
-  processing: '处理中',
-  resolved: '已完成',
-}
+import type { CityEvent, EventStatus, EventActionLog, EnvMetricKey, EventFilter } from '@/types'
 
 const levelConfig = {
   critical: { label: '紧急', color: 'bg-cyber-red', text: 'text-cyber-red', icon: AlertOctagon },
@@ -62,6 +46,8 @@ const typeIcons: Record<CityEvent['type'], any> = {
 const actionLogConfig: Record<EventActionLog['type'], { label: string; icon: any; color: string }> = {
   created: { label: '事件创建', icon: Plus, color: 'text-cyber-blue' },
   env_generated: { label: '环境告警生成', icon: Wind, color: 'text-cyber-purple' },
+  assigned: { label: '事件派单', icon: Send, color: 'text-cyber-blue' },
+  eta_updated: { label: '预计完成更新', icon: CalendarDays, color: 'text-cyber-purple' },
   step_approved: { label: '审批通过', icon: CheckCircle2, color: 'text-cyber-green' },
   step_rejected: { label: '审批退回', icon: XCircle, color: 'text-cyber-red' },
   annotation_added: { label: '协同标注', icon: MessageSquare, color: 'text-cyber-blue' },
@@ -75,6 +61,14 @@ const metricLabels: Record<EnvMetricKey, string> = {
   waterQuality: '水质',
 }
 
+const candidateAssignees = [
+  { id: 'u-caozhirou', name: '曹之柔' },
+  { id: 'u-linjiali', name: '林佳丽' },
+  { id: 'u-weifan', name: '魏帆' },
+  { id: 'u-chenjie', name: '陈洁' },
+  { id: 'u-system', name: '系统联动' },
+]
+
 function Plus() {
   return <span>+</span>
 }
@@ -86,25 +80,36 @@ export default function EventPanel() {
   const setSelectedEvent = useCityStore((s) => s.setSelectedEvent)
   const approveEventStep = useCityStore((s) => s.approveEventStep)
   const addEventAnnotation = useCityStore((s) => s.addEventAnnotation)
+  const assignEvent = useCityStore((s) => s.assignEvent)
   const getEffectivePermittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes)
   const currentUser = useCityStore((s) => s.currentUser)
   const previewRole = useCityStore((s) => s.previewRole)
+  const eventFilter = useCityStore((s) => s.eventFilter)
+  const toggleFilterType = useCityStore((s) => s.toggleFilterType)
+  const toggleFilterLevel = useCityStore((s) => s.toggleFilterLevel)
+  const toggleFilterStatus = useCityStore((s) => s.toggleFilterStatus)
+  const resetEventFilter = useCityStore((s) => s.resetEventFilter)
 
   const permittedTypes = getEffectivePermittedEventTypes()
 
-  const [filter, setFilter] = useState<FilterKey>('all')
   const [approvalComment, setApprovalComment] = useState('')
   const [annotationText, setAnnotationText] = useState('')
+  const [assignUserId, setAssignUserId] = useState<string>('')
+  const [assignEtaHours, setAssignEtaHours] = useState<number>(24)
 
   const typeFilteredEvents = useMemo(
     () => events.filter(e => permittedTypes.includes(e.type)),
     [events, permittedTypes]
   )
 
-  const filteredEvents = useMemo(
-    () => typeFilteredEvents.filter(filterMap[filter]).sort((a, b) => b.createdAt - a.createdAt),
-    [typeFilteredEvents, filter]
-  )
+  const filteredEvents = useMemo(() => {
+    const f: EventFilter = eventFilter
+    return typeFilteredEvents
+      .filter(e => f.types.length === 0 || f.types.includes(e.type))
+      .filter(e => f.levels.length === 0 || f.levels.includes(e.level))
+      .filter(e => f.statuses.length === 0 || f.statuses.includes(e.status))
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }, [typeFilteredEvents, eventFilter])
 
   const selected = useMemo(
     () => typeFilteredEvents.find((e) => e.id === selectedEvent),
@@ -125,6 +130,7 @@ export default function EventPanel() {
   }, [selected])
 
   const canApprove = currentUser.role === 'city' || currentUser.role === 'district'
+  const canAssign = currentUser.role === 'city' || currentUser.role === 'district'
 
   const handleApprove = (approved: boolean) => {
     if (selected && currentStepIndex >= 0 && canApprove) {
@@ -143,6 +149,15 @@ export default function EventPanel() {
       timestamp: Date.now(),
     })
     setAnnotationText('')
+  }
+
+  const handleAssign = () => {
+    if (!selected || !assignUserId) return
+    const eta = Date.now() + assignEtaHours * 3600 * 1000
+    const user = candidateAssignees.find(u => u.id === assignUserId)
+    assignEvent(selected.id, user?.name ?? assignUserId, eta)
+    setAssignUserId('')
+    setAssignEtaHours(24)
   }
 
   const sortedActionLogs = useMemo(() => {
@@ -181,9 +196,37 @@ export default function EventPanel() {
     return all.sort((a, b) => a.timestamp - b.timestamp)
   }, [selected])
 
+  if (selectedEvent && !selected) {
+    return (
+      <div className="fixed right-0 top-16 bottom-16 z-40 flex w-96 flex-col border-l border-cyber-border bg-cyber-bg/95 backdrop-blur-md animate-slide-in-right">
+        <div className="flex items-center justify-between border-b border-cyber-border p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-cyber-red" />
+            <h2 className="font-sans text-base font-bold text-white">无访问权限</h2>
+          </div>
+          <button onClick={() => { setSelectedEvent(null); setActivePanel('none') }} className="text-cyber-muted hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+          <Shield className="h-16 w-16 text-cyber-red/40" />
+          <p className="text-sm text-white">当前账号无权限查看该事件</p>
+          <p className="text-xs text-cyber-muted">该事件类型已被权限收回或当前预览角色未授权</p>
+          <button
+            onClick={() => { setSelectedEvent(null); setActivePanel('none') }}
+            className="mt-4 rounded border border-cyber-blue/40 bg-cyber-blue/10 px-4 py-1.5 text-xs text-cyber-blue hover:bg-cyber-blue/20 transition"
+          >
+            返回列表
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (selected) {
     const lvlCfg = levelConfig[selected.level]
     const LevelIcon = lvlCfg.icon
+    const canAssignState = selected.status === 'detected' || selected.status === 'reported' || selected.status === 'returned'
     return (
       <div className="fixed right-0 top-16 bottom-16 z-40 flex w-96 flex-col border-l border-cyber-border bg-cyber-bg/95 backdrop-blur-md animate-slide-in-right">
         <div className="flex items-center justify-between border-b border-cyber-border p-4">
@@ -241,6 +284,18 @@ export default function EventPanel() {
                 <ListOrdered className="h-3.5 w-3.5" />
                 <span>ID: {selected.id}</span>
               </div>
+              {selected.assignee && (
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5" />
+                  <span>处置人: <span className="text-white">{selected.assignee}</span></span>
+                </div>
+              )}
+              {selected.eta && (
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>预计完成: <span className={selected.eta < Date.now() ? 'text-cyber-red' : 'text-cyber-green'}>{new Date(selected.eta).toLocaleString('zh-CN')}</span></span>
+                </div>
+              )}
             </div>
             {selected.generatedFrom && (
               <div className="animate-fade-in mt-1 rounded border border-cyber-purple/40 bg-cyber-purple/5 p-2.5">
@@ -262,6 +317,49 @@ export default function EventPanel() {
               </div>
             )}
           </div>
+
+          {canAssign && canAssignState && (
+            <div className="rounded border border-cyber-blue/30 bg-cyber-blue/5 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Send className="h-3.5 w-3.5 text-cyber-blue" />
+                <h3 className="font-medium text-white text-sm">一键派单</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-cyber-muted">处置人</label>
+                  <select
+                    value={assignUserId}
+                    onChange={(e) => setAssignUserId(e.target.value)}
+                    className="mt-1 w-full rounded border border-cyber-border bg-cyber-bg/80 px-2 py-1.5 text-xs text-white focus:border-cyber-blue focus:outline-none"
+                  >
+                    <option value="">选择处置人</option>
+                    {candidateAssignees.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-cyber-muted">预计完成(小时)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={assignEtaHours}
+                    onChange={(e) => setAssignEtaHours(Math.max(1, Number(e.target.value) || 1))}
+                    className="mt-1 w-full rounded border border-cyber-border bg-cyber-bg/80 px-2 py-1.5 text-xs text-white focus:border-cyber-blue focus:outline-none"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleAssign}
+                disabled={!assignUserId}
+                className="w-full rounded bg-cyber-blue py-1.5 text-xs font-medium text-black hover:bg-cyber-blue/90 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5"
+              >
+                <Send className="h-3 w-3" />
+                派发工单
+              </button>
+            </div>
+          )}
 
           <div>
             <div className="mb-3 flex items-center gap-2">
@@ -474,6 +572,12 @@ export default function EventPanel() {
     )
   }
 
+  const filterTypeOptions: CityEvent['type'][] = ['traffic', 'environment', 'energy', 'security']
+  const filterLevelOptions: CityEvent['level'][] = ['critical', 'major', 'minor']
+  const filterStatusOptions: EventStatus[] = ['detected', 'reported', 'assigned', 'processing', 'resolved', 'returned']
+  const totalFiltered = filteredEvents.length
+  const hasActiveFilter = eventFilter.types.length + eventFilter.levels.length + eventFilter.statuses.length > 0
+
   return (
     <div className="fixed right-0 top-16 bottom-16 z-40 flex w-96 flex-col border-l border-cyber-border bg-cyber-bg/95 backdrop-blur-md animate-slide-in-right">
       <div className="flex items-center justify-between border-b border-cyber-border p-4">
@@ -494,39 +598,96 @@ export default function EventPanel() {
         </button>
       </div>
 
-      <div className="border-b border-cyber-border px-4 py-2">
-        <div className="flex gap-1 rounded bg-cyber-card/40 p-1">
-          {(Object.keys(filterLabels) as FilterKey[]).map((k) => {
-            const cnt = typeFilteredEvents.filter(filterMap[k]).length
-            return (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                className={`flex-1 rounded py-1 text-xs font-medium transition ${
-                  filter === k
-                    ? 'bg-cyber-surface text-white shadow-sm'
-                    : 'text-cyber-muted hover:text-white'
-                }`}
-              >
-                {filterLabels[k]}
-                <span className="ml-1 text-[10px] opacity-70">
-                  {cnt}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        {permittedTypes.length < 4 && (
-          <div className="mt-1.5 text-[9px] text-cyber-muted">
-            可见事件类型：{permittedTypes.map(t => typeLabels[t]).join('、')} · 共 {typeFilteredEvents.length} 条
+      <div className="border-b border-cyber-border px-4 py-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs text-cyber-muted">
+            <Filter className="h-3 w-3" />
+            组合筛选
           </div>
-        )}
+          {hasActiveFilter && (
+            <button
+              onClick={resetEventFilter}
+              className="flex items-center gap-1 text-[10px] text-cyber-muted hover:text-white transition"
+            >
+              <RotateCcw className="h-2.5 w-2.5" />
+              重置
+            </button>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-1">
+            <span className="text-[10px] text-cyber-muted self-center mr-1">类型:</span>
+            {filterTypeOptions.filter(t => permittedTypes.includes(t)).map(t => {
+              const active = eventFilter.types.includes(t)
+              return (
+                <button
+                  key={t}
+                  onClick={() => toggleFilterType(t)}
+                  className={`rounded px-2 py-0.5 text-[10px] transition ${
+                    active
+                      ? 'bg-cyber-blue/20 text-cyber-blue border border-cyber-blue/40'
+                      : 'bg-cyber-card/40 text-cyber-muted border border-cyber-border hover:text-white hover:border-cyber-blue/30'
+                  }`}
+                >
+                  {typeLabels[t]}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <span className="text-[10px] text-cyber-muted self-center mr-1">等级:</span>
+            {filterLevelOptions.map(l => {
+              const active = eventFilter.levels.includes(l)
+              const lvlC = levelConfig[l]
+              return (
+                <button
+                  key={l}
+                  onClick={() => toggleFilterLevel(l)}
+                  className={`rounded px-2 py-0.5 text-[10px] transition ${
+                    active
+                      ? `${lvlC.color} bg-opacity-20 text-white border ${lvlC.text.replace('text-', 'border-')}`
+                      : 'bg-cyber-card/40 text-cyber-muted border border-cyber-border hover:text-white hover:border-cyber-blue/30'
+                  }`}
+                >
+                  {lvlC.label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <span className="text-[10px] text-cyber-muted self-center mr-1">状态:</span>
+            {filterStatusOptions.map(s => {
+              const active = eventFilter.statuses.includes(s)
+              return (
+                <button
+                  key={s}
+                  onClick={() => toggleFilterStatus(s)}
+                  className={`rounded px-2 py-0.5 text-[10px] transition ${
+                    active
+                      ? 'bg-cyber-blue/20 text-cyber-blue border border-cyber-blue/40'
+                      : 'bg-cyber-card/40 text-cyber-muted border border-cyber-border hover:text-white hover:border-cyber-blue/30'
+                  }`}
+                >
+                  {statusLabels[s]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="flex items-center justify-between pt-1 border-t border-cyber-border/40">
+          <span className="text-[10px] text-cyber-muted">
+            共 <span className="text-white font-mono">{typeFilteredEvents.length}</span> 条事件，筛选后 <span className="text-cyber-blue font-mono">{totalFiltered}</span> 条
+          </span>
+          <span className="text-[10px] text-cyber-muted">
+            可见类型：{permittedTypes.map(t => typeLabels[t]).join('、')}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {filteredEvents.length === 0 ? (
           <div className="py-16 text-center text-sm text-cyber-muted">
-            暂无事件
+            {hasActiveFilter ? '当前筛选条件下无事件' : '暂无事件'}
           </div>
         ) : (
           filteredEvents.map((e) => {
@@ -556,6 +717,12 @@ export default function EventPanel() {
                         {typeLabels[e.type]}
                       </span>
                       <span className="rounded bg-cyber-bg/60 px-1.5 py-0.5 font-mono">{lvlCfg.label}</span>
+                      {e.assignee && (
+                        <span className="flex items-center gap-0.5 rounded bg-cyber-green/10 px-1.5 py-0.5 text-cyber-green">
+                          <User className="h-2.5 w-2.5" />
+                          {e.assignee.length > 4 ? e.assignee.slice(0, 4) + '…' : e.assignee}
+                        </span>
+                      )}
                       {e.generatedFrom && (
                         <span className="flex items-center gap-0.5 rounded bg-cyber-purple/20 px-1.5 py-0.5 text-cyber-purple">
                           <Wind className="h-2.5 w-2.5" />

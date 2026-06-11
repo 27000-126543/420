@@ -13,17 +13,27 @@ const layers: { key: LayerKey; label: string; icon: React.ElementType }[] = [
 ]
 
 export default function LayerToggle() {
-  const visibleLayers = useCityStore((s) => s.visibleLayers)
   const toggleLayer = useCityStore((s) => s.toggleLayer)
   const previewRole = useCityStore((s) => s.previewRole)
+  const previewVisibleLayers = useCityStore((s) => s.previewVisibleLayers)
+  const prePreviewVisibleLayers = useCityStore((s) => s.prePreviewVisibleLayers)
+  const actualVisibleLayers = useCityStore((s) => s.visibleLayers)
   const currentUserRole = useCityStore((s) => s.currentUser.role)
   const roleLayerPerms = useCityStore((s) => s.roleLayerPerms)
   const getEffectivePermittedLayers = useCityStore((s) => s.getEffectivePermittedLayers)
+  const getVisibleLayers = useCityStore((s) => s.getVisibleLayers)
   const permittedLayers = useMemo(() => getEffectivePermittedLayers(), [
     getEffectivePermittedLayers,
     previewRole,
     currentUserRole,
     roleLayerPerms,
+  ])
+  const visibleLayers = useMemo(() => getVisibleLayers(), [
+    getVisibleLayers,
+    previewRole,
+    previewVisibleLayers,
+    prePreviewVisibleLayers,
+    actualVisibleLayers,
   ])
 
   return (

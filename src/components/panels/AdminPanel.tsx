@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   X, Shield, Users, Layers, FileText, Edit2, Trash2, Search, LogIn, LogOut, Eye,
-  Activity, Wind, Zap, AlertTriangle, Check,
+  Activity, Wind, Zap, AlertTriangle, Check, MapPin, BarChart3, Boxes,
 } from 'lucide-react'
 import { useCityStore } from '@/store/useCityStore'
 import type { LayerKey, UserData, CityEvent } from '@/types'
@@ -41,6 +41,8 @@ export default function AdminPanel() {
   const setRoleEventTypePerms = useCityStore((s) => s.setRoleEventTypePerms)
   const previewRole = useCityStore((s) => s.previewRole)
   const setPreviewRole = useCityStore((s) => s.setPreviewRole)
+  const events = useCityStore((s) => s.events)
+  const [impactRoleKey, setImpactRoleKey] = useState<string>('district')
 
   const [activeTab, setActiveTab] = useState<TabKey>('roles')
   const defaultRoleLayers: Record<string, LayerKey[]> = {
@@ -286,112 +288,147 @@ export default function AdminPanel() {
         )}
 
         {activeTab === 'layers' && (
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-cyber-muted">
-              勾选 / 取消勾选后立刻生效。取消的图层会从左侧控制和3D场景中移除。
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-cyber-border">
-                    <th className="py-2 text-left text-cyber-muted font-normal">角色 / 图层</th>
-                    {(Object.keys(layerLabels) as LayerKey[]).map(lk => {
-                      const LIcon = layerLabels[lk].icon
-                      return (
-                        <th key={lk} className="py-2 px-1 text-center text-cyber-muted font-normal">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <LIcon className="h-3.5 w-3.5" />
-                            <span className="text-[9px]">{layerLabels[lk].label}</span>
-                          </div>
-                        </th>
-                      )
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {roles.map(r => (
-                    <tr key={r.key} className="border-b border-cyber-border/40">
-                      <td className="py-2 pr-2">
-                        <span className="text-white">{r.name}</span>
-                      </td>
+          <ImpactPreviewWrapper
+            roleKey={impactRoleKey}
+            setRoleKey={setImpactRoleKey}
+            roleLabels={Object.fromEntries(roles.map(r => [r.key, r.name]))}
+            currentLayers={layerPerms[impactRoleKey] ?? []}
+            layerLabels={layerLabels}
+          >
+            <div className="p-4 space-y-4">
+              <div className="text-[10px] text-cyber-muted">
+                勾选 / 取消勾选后立刻生效。取消的图层会从左侧控制和3D场景中移除。
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-cyber-border">
+                      <th className="py-2 text-left text-cyber-muted font-normal">角色 / 图层</th>
                       {(Object.keys(layerLabels) as LayerKey[]).map(lk => {
-                        const checked = (layerPerms[r.key] ?? []).includes(lk)
+                        const LIcon = layerLabels[lk].icon
                         return (
-                          <td key={lk} className="py-2 px-1 text-center">
-                            <button
-                              onClick={() => toggleLayerPerm(r.key, lk)}
-                              className={`flex h-4 w-4 mx-auto items-center justify-center rounded border transition ${
-                                checked
-                                  ? 'border-cyber-blue bg-cyber-blue/20 text-cyber-blue'
-                                  : 'border-cyber-border bg-cyber-bg/60 text-transparent hover:border-cyber-blue/40'
-                              }`}
-                            >
-                              {checked && <Check className="h-3 w-3" />}
-                            </button>
-                          </td>
+                          <th key={lk} className="py-2 px-1 text-center text-cyber-muted font-normal">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <LIcon className="h-3.5 w-3.5" />
+                              <span className="text-[9px]">{layerLabels[lk].label}</span>
+                            </div>
+                          </th>
                         )
                       })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {roles.map(r => (
+                      <tr
+                        key={r.key}
+                        onClick={() => setImpactRoleKey(r.key)}
+                        className={`cursor-pointer border-b border-cyber-border/40 transition ${
+                          impactRoleKey === r.key ? 'bg-cyber-blue/5' : ''
+                        }`}
+                      >
+                        <td className="py-2 pr-2">
+                          <span className={`${impactRoleKey === r.key ? 'text-cyber-blue font-medium' : 'text-white'}`}>{r.name}</span>
+                        </td>
+                        {(Object.keys(layerLabels) as LayerKey[]).map(lk => {
+                          const checked = (layerPerms[r.key] ?? []).includes(lk)
+                          return (
+                            <td key={lk} className="py-2 px-1 text-center">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleLayerPerm(r.key, lk) }}
+                                className={`flex h-4 w-4 mx-auto items-center justify-center rounded border transition ${
+                                  checked
+                                    ? 'border-cyber-blue bg-cyber-blue/20 text-cyber-blue'
+                                    : 'border-cyber-border bg-cyber-bg/60 text-transparent hover:border-cyber-blue/40'
+                                }`}
+                              >
+                                {checked && <Check className="h-3 w-3" />}
+                              </button>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+            <LayerImpactCard roleKey={impactRoleKey} currentLayers={layerPerms[impactRoleKey] ?? []} />
+          </ImpactPreviewWrapper>
         )}
 
         {activeTab === 'events' && (
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-cyber-muted">
-              限制每个角色能看到的事件类型；取消授权后事件中心不会出现对应事件。
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-cyber-border">
-                    <th className="py-2 text-left text-cyber-muted font-normal">角色 / 事件</th>
-                    {(Object.keys(eventTypeLabels) as CityEvent['type'][]).map(ek => {
-                      const EIcon = eventTypeLabels[ek].icon
-                      const EColor = eventTypeLabels[ek].color
-                      return (
-                        <th key={ek} className="py-2 px-1 text-center text-cyber-muted font-normal">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <EIcon className={`h-3.5 w-3.5 ${EColor}`} />
-                            <span className="text-[9px]">{eventTypeLabels[ek].label}</span>
-                          </div>
-                        </th>
-                      )
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {roles.map(r => (
-                    <tr key={r.key} className="border-b border-cyber-border/40">
-                      <td className="py-2 pr-2">
-                        <span className="text-white">{r.name}</span>
-                      </td>
+          <ImpactPreviewWrapper
+            roleKey={impactRoleKey}
+            setRoleKey={setImpactRoleKey}
+            roleLabels={Object.fromEntries(roles.map(r => [r.key, r.name]))}
+            currentLayers={layerPerms[impactRoleKey] ?? []}
+            layerLabels={layerLabels}
+          >
+            <div className="p-4 space-y-4">
+              <div className="text-[10px] text-cyber-muted">
+                限制每个角色能看到的事件类型；取消授权后事件中心不会出现对应事件。
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-cyber-border">
+                      <th className="py-2 text-left text-cyber-muted font-normal">角色 / 事件</th>
                       {(Object.keys(eventTypeLabels) as CityEvent['type'][]).map(ek => {
-                        const checked = (eventTypePerms[r.key] ?? []).includes(ek)
+                        const EIcon = eventTypeLabels[ek].icon
+                        const EColor = eventTypeLabels[ek].color
                         return (
-                          <td key={ek} className="py-2 px-1 text-center">
-                            <button
-                              onClick={() => toggleEventTypePerm(r.key, ek)}
-                              className={`flex h-4 w-4 mx-auto items-center justify-center rounded border transition ${
-                                checked
-                                  ? 'border-cyber-blue bg-cyber-blue/20 text-cyber-blue'
-                                  : 'border-cyber-border bg-cyber-bg/60 text-transparent hover:border-cyber-blue/40'
-                              }`}
-                            >
-                              {checked && <Check className="h-3 w-3" />}
-                            </button>
-                          </td>
+                          <th key={ek} className="py-2 px-1 text-center text-cyber-muted font-normal">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <EIcon className={`h-3.5 w-3.5 ${EColor}`} />
+                              <span className="text-[9px]">{eventTypeLabels[ek].label}</span>
+                            </div>
+                          </th>
                         )
                       })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {roles.map(r => (
+                      <tr
+                        key={r.key}
+                        onClick={() => setImpactRoleKey(r.key)}
+                        className={`cursor-pointer border-b border-cyber-border/40 transition ${
+                          impactRoleKey === r.key ? 'bg-cyber-blue/5' : ''
+                        }`}
+                      >
+                        <td className="py-2 pr-2">
+                          <span className={`${impactRoleKey === r.key ? 'text-cyber-blue font-medium' : 'text-white'}`}>{r.name}</span>
+                        </td>
+                        {(Object.keys(eventTypeLabels) as CityEvent['type'][]).map(ek => {
+                          const checked = (eventTypePerms[r.key] ?? []).includes(ek)
+                          return (
+                            <td key={ek} className="py-2 px-1 text-center">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleEventTypePerm(r.key, ek) }}
+                                className={`flex h-4 w-4 mx-auto items-center justify-center rounded border transition ${
+                                  checked
+                                    ? 'border-cyber-blue bg-cyber-blue/20 text-cyber-blue'
+                                    : 'border-cyber-border bg-cyber-bg/60 text-transparent hover:border-cyber-blue/40'
+                                }`}
+                              >
+                                {checked && <Check className="h-3 w-3" />}
+                              </button>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+            <EventTypeImpactCard
+              roleKey={impactRoleKey}
+              currentTypes={eventTypePerms[impactRoleKey] ?? []}
+              events={events}
+              eventTypeLabels={eventTypeLabels}
+            />
+          </ImpactPreviewWrapper>
         )}
 
         {activeTab === 'logs' && (
@@ -421,4 +458,139 @@ export default function AdminPanel() {
       </div>
     </div>
   )
+}
+
+function ImpactPreviewWrapper({
+  roleKey, setRoleKey, roleLabels,
+  children,
+}: {
+  roleKey: string
+  setRoleKey: (k: string) => void
+  roleLabels: Record<string, string>
+  currentLayers: LayerKey[]
+  layerLabels: Record<LayerKey, { label: string; icon: any }>
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function LayerImpactCard({ roleKey, currentLayers }: { roleKey: string, currentLayers: LayerKey[] }) {
+  const allLayers: LayerKey[] = ['traffic', 'environment', 'energy', 'sensors', 'events', 'annotations']
+  const totalCount = allLayers.length
+  const availableCount = currentLayers.length
+  const removedCount = totalCount - availableCount
+  const modules = currentLayers.length
+
+  return (
+    <div className="border-t border-cyber-border bg-cyber-card/30 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-3.5 w-3.5 text-cyber-blue" />
+          <span className="text-xs font-medium text-white">变更影响预览</span>
+        </div>
+        <span className="text-[10px] text-cyber-muted">{roleKey} 角色</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded border border-cyber-green/30 bg-cyber-green/5 p-2">
+          <Boxes className="h-4 w-4 text-cyber-green mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-cyber-green">{modules}</div>
+          <div className="text-[9px] text-cyber-green/80">保留模块</div>
+        </div>
+        <div className="rounded border border-cyber-red/30 bg-cyber-red/5 p-2">
+          <X className="h-4 w-4 text-cyber-red mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-cyber-red">{removedCount}</div>
+          <div className="text-[9px] text-cyber-red/80">移除图层</div>
+        </div>
+        <div className="rounded border border-cyber-orange/30 bg-cyber-orange/5 p-2">
+          <MapPin className="h-4 w-4 text-cyber-orange mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-cyber-orange">{availableCount}</div>
+          <div className="text-[9px] text-cyber-orange/80">3D可见标记</div>
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] text-cyber-muted mb-1">当前可访问模块：</div>
+        <div className="flex flex-wrap gap-1">
+          {currentLayers.length === 0 ? (
+            <span className="text-[10px] text-cyber-muted">（无）</span>
+          ) : currentLayers.map(l => (
+            <span key={l} className="rounded bg-cyber-blue/15 px-1.5 py-0.5 text-[9px] text-cyber-blue">
+              {layerLabelShort(l)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EventTypeImpactCard({ roleKey, currentTypes, events, eventTypeLabels }: {
+  roleKey: string
+  currentTypes: CityEvent['type'][]
+  events: CityEvent[]
+  eventTypeLabels: Record<CityEvent['type'], { label: string; icon: any; color: string }>
+}) {
+  const allTypes: CityEvent['type'][] = ['traffic', 'environment', 'energy', 'security']
+  const allEvents = events.length
+  const visibleEvents = events.filter(e => currentTypes.includes(e.type)).length
+  const hiddenEvents = allEvents - visibleEvents
+  const unresolvedHidden = events.filter(e => currentTypes.includes(e.type) === false && e.status !== 'resolved').length
+
+  return (
+    <div className="border-t border-cyber-border bg-cyber-card/30 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-3.5 w-3.5 text-cyber-blue" />
+          <span className="text-xs font-medium text-white">变更影响预览</span>
+        </div>
+        <span className="text-[10px] text-cyber-muted">{roleKey} 角色</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded border border-cyber-green/30 bg-cyber-green/5 p-2">
+          <Check className="h-4 w-4 text-cyber-green mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-cyber-green">{visibleEvents}</div>
+          <div className="text-[9px] text-cyber-green/80">可见事件</div>
+        </div>
+        <div className="rounded border border-cyber-red/30 bg-cyber-red/5 p-2">
+          <AlertTriangle className="h-4 w-4 text-cyber-red mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-cyber-red">{hiddenEvents}</div>
+          <div className="text-[9px] text-cyber-red/80">隐藏事件</div>
+        </div>
+        <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-2">
+          <AlertCircle className="h-4 w-4 text-yellow-500 mx-auto mb-0.5" />
+          <div className="font-mono text-base font-bold text-yellow-500">{unresolvedHidden}</div>
+          <div className="text-[9px] text-yellow-500/80">未闭环隐藏</div>
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] text-cyber-muted mb-1">当前可见事件类型：</div>
+        <div className="flex flex-wrap gap-1">
+          {currentTypes.length === 0 ? (
+            <span className="text-[10px] text-cyber-muted">（无）</span>
+          ) : currentTypes.map(t => {
+            const cfg = eventTypeLabels[t]
+            return (
+              <span key={t} className={`rounded bg-cyber-bg/60 px-1.5 py-0.5 text-[9px] ${cfg.color}`}>
+                {cfg.label}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function layerLabelShort(k: LayerKey) {
+  const m: Record<LayerKey, string> = {
+    traffic: '交通', environment: '环境', energy: '能耗', sensors: '传感器', events: '事件', annotations: '标注',
+  }
+  return m[k] ?? k
+}
+
+function AlertCircle(props: any) {
+  return <AlertTriangle {...props} />
 }

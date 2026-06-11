@@ -97,6 +97,8 @@ export type EventActionType =
   | 'step_rejected' 
   | 'annotation_added' 
   | 'status_changed'
+  | 'assigned'
+  | 'eta_updated'
 
 export interface EventActionLog {
   id: string
@@ -125,6 +127,14 @@ export interface CityEvent {
     metric: EnvMetricKey
     value: number
   }
+  assignee?: string
+  eta?: number
+}
+
+export interface EventFilter {
+  types: ('traffic' | 'environment' | 'energy' | 'security')[]
+  levels: ('critical' | 'major' | 'minor')[]
+  statuses: EventStatus[]
 }
 
 export interface BuildingData {

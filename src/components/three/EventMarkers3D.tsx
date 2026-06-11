@@ -21,16 +21,27 @@ const typeLabels: Record<CityEvent['type'], string> = {
 export default function EventMarkers3D() {
   const events = useCityStore((s) => s.events)
   const setSelectedEvent = useCityStore((s) => s.setSelectedEvent)
-  const visibleLayers = useCityStore((s) => s.visibleLayers)
   const previewRole = useCityStore((s) => s.previewRole)
+  const previewVisibleLayers = useCityStore((s) => s.previewVisibleLayers)
+  const prePreviewVisibleLayers = useCityStore((s) => s.prePreviewVisibleLayers)
+  const actualVisibleLayers = useCityStore((s) => s.visibleLayers)
   const currentUserRole = useCityStore((s) => s.currentUser.role)
   const roleEventTypePerms = useCityStore((s) => s.roleEventTypePerms)
   const getEffectivePermittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes)
+  const getVisibleLayers = useCityStore((s) => s.getVisibleLayers)
+  const eventFilter = useCityStore((s) => s.eventFilter)
   const permittedEventTypes = useMemo(() => getEffectivePermittedEventTypes(), [
     getEffectivePermittedEventTypes,
     previewRole,
     currentUserRole,
     roleEventTypePerms,
+  ])
+  const visibleLayers = useMemo(() => getVisibleLayers(), [
+    getVisibleLayers,
+    previewRole,
+    previewVisibleLayers,
+    prePreviewVisibleLayers,
+    actualVisibleLayers,
   ])
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const ringsRef = useRef<THREE.Group>(null)
@@ -39,10 +50,12 @@ export default function EventMarkers3D() {
 
   const activeEvents = useMemo(() => {
     if (!eventsLayerVisible) return []
-    return events.filter(
-      (e) => e.status !== 'resolved' && permittedEventTypes.includes(e.type)
-    )
-  }, [events, eventsLayerVisible, permittedEventTypes])
+    return events
+      .filter((e) => permittedEventTypes.includes(e.type))
+      .filter((e) => eventFilter.types.length === 0 || eventFilter.types.includes(e.type))
+      .filter((e) => eventFilter.levels.length === 0 || eventFilter.levels.includes(e.level))
+      .filter((e) => eventFilter.statuses.length === 0 || eventFilter.statuses.includes(e.status))
+  }, [events, eventsLayerVisible, permittedEventTypes, eventFilter])
 
   useFrame((state) => {
     if (!ringsRef.current) return

@@ -17,6 +17,7 @@ import type {
   EventActionLog,
   TrafficLightSchedulePreset,
   EnvMetricKey,
+  EventFilter,
 } from '@/types'
 
 const DEFAULT_PRESETS: TrafficLightSchedulePreset[] = [
@@ -76,6 +77,8 @@ interface CityState {
   annotations: Annotation[]
 
   visibleLayers: LayerKey[]
+  previewVisibleLayers: LayerKey[] | null
+  prePreviewVisibleLayers: LayerKey[] | null
   viewMode: ViewMode
   activePanel: PanelType
   selectedBuilding: string | null
@@ -90,6 +93,7 @@ interface CityState {
   activeLightPreset: string | null
   selectedTrafficLights: string[]
   previewRole: UserData['role'] | null
+  eventFilter: EventFilter
 
   setBuildings: (b: BuildingData[]) => void
   setSensors: (s: SensorData[]) => void
@@ -126,9 +130,15 @@ interface CityState {
   applyPresetToTrafficLights: (presetId: string, lightIds: string[]) => void
   addLightSchedulePreset: (preset: Omit<TrafficLightSchedulePreset, 'id'>) => void
   deleteLightSchedulePreset: (presetId: string) => void
+  assignEvent: (eventId: string, assignee: string, eta?: number) => void
+  toggleFilterType: (t: CityEvent['type']) => void
+  toggleFilterLevel: (l: CityEvent['level']) => void
+  toggleFilterStatus: (s: EventStatus) => void
+  resetEventFilter: () => void
   getEffectiveUser: () => UserData
   getEffectivePermittedLayers: () => LayerKey[]
   getEffectivePermittedEventTypes: () => CityEvent['type'][]
+  getVisibleLayers: () => LayerKey[]
 }
 
 const makeDefaultUser = (role: UserData['role']): UserData => {
@@ -165,6 +175,8 @@ export const useCityStore = create<CityState>((set, get) => ({
   annotations: [],
 
   visibleLayers: ['traffic', 'sensors'],
+  previewVisibleLayers: null,
+  prePreviewVisibleLayers: null,
   viewMode: 'city',
   activePanel: 'none',
   selectedBuilding: null,
@@ -184,6 +196,7 @@ export const useCityStore = create<CityState>((set, get) => ({
   activeLightPreset: null,
   selectedTrafficLights: [],
   previewRole: null,
+  eventFilter: { types: [], levels: [], statuses: [] },
 
   getEffectiveUser: () => {
     const s = get()
@@ -215,6 +228,11 @@ export const useCityStore = create<CityState>((set, get) => ({
     return s.roleEventTypePerms[role] ?? s.getEffectiveUser().permittedEventTypes
   },
 
+  getVisibleLayers: () => {
+    const s = get()
+    return s.previewVisibleLayers ?? s.visibleLayers
+  },
+
   setBuildings: (b) => set({ buildings: b }),
   setSensors: (s) => set({ sensors: s }),
   setTrafficFlows: (f) => set({ trafficFlows: f }),
@@ -226,6 +244,14 @@ export const useCityStore = create<CityState>((set, get) => ({
     set((state) => {
       const perms = state.getEffectivePermittedLayers()
       if (!perms.includes(layer)) return state
+      if (state.previewRole) {
+        const current = state.previewVisibleLayers ?? state.visibleLayers
+        return {
+          previewVisibleLayers: current.includes(layer)
+            ? current.filter((l) => l !== layer)
+            : [...current, layer],
+        }
+      }
       return {
         visibleLayers: state.visibleLayers.includes(layer)
           ? state.visibleLayers.filter((l) => l !== layer)
@@ -416,9 +442,12 @@ export const useCityStore = create<CityState>((set, get) => ({
     set((state) => {
       if (role === null) {
         const actualPerms = state.roleLayerPerms[state.currentUser.role] ?? state.currentUser.permittedLayers
+        const actualVisible = (state.prePreviewVisibleLayers ?? state.visibleLayers).filter((l) => actualPerms.includes(l))
         let patch: Partial<CityState> = {
           previewRole: null,
-          visibleLayers: state.visibleLayers.filter((l) => actualPerms.includes(l)),
+          previewVisibleLayers: null,
+          prePreviewVisibleLayers: null,
+          visibleLayers: actualVisible,
         }
         const actualEventTypes = state.roleEventTypePerms[state.currentUser.role] ?? state.currentUser.permittedEventTypes
         if (state.selectedEvent) {
@@ -430,9 +459,12 @@ export const useCityStore = create<CityState>((set, get) => ({
         return patch
       }
       const perms = state.roleLayerPerms[role] ?? makeDefaultUser(role).permittedLayers
+      const currentActiveLayers = state.previewVisibleLayers ?? state.visibleLayers
+      const previewInitial = currentActiveLayers.filter((l) => perms.includes(l))
       let patch: Partial<CityState> = {
         previewRole: role,
-        visibleLayers: state.visibleLayers.filter((l) => perms.includes(l)),
+        prePreviewVisibleLayers: state.previewVisibleLayers === null ? state.visibleLayers : state.prePreviewVisibleLayers,
+        previewVisibleLayers: previewInitial,
       }
       const eventTypes = state.roleEventTypePerms[role] ?? makeDefaultUser(role).permittedEventTypes
       if (state.selectedEvent) {
@@ -568,4 +600,66 @@ export const useCityStore = create<CityState>((set, get) => ({
       lightSchedulePresets: state.lightSchedulePresets.filter((p) => p.id !== presetId),
       activeLightPreset: state.activeLightPreset === presetId ? null : state.activeLightPreset,
     })),
+
+  assignEvent: (eventId, assignee, eta) =>
+    set((state) => {
+      const user = state.getEffectiveUser()
+      const logs: EventActionLog[] = []
+      const now = Date.now()
+      logs.push({
+        id: `log-${now}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'assigned',
+        timestamp: now,
+        userId: user.id,
+        userName: user.name,
+        description: `派单给：${assignee}${eta ? `，预计完成时间：${new Date(eta).toLocaleString('zh-CN')}` : ''}`,
+        metadata: { assignee, eta },
+      })
+      return {
+        events: state.events.map((e) =>
+          e.id === eventId
+            ? {
+                ...e,
+                assignee,
+                eta,
+                status: e.status === 'detected' || e.status === 'reported' ? 'assigned' : e.status,
+                actionLogs: [...e.actionLogs, ...logs],
+              }
+            : e
+        ),
+      }
+    }),
+
+  toggleFilterType: (t) =>
+    set((state) => ({
+      eventFilter: {
+        ...state.eventFilter,
+        types: state.eventFilter.types.includes(t)
+          ? state.eventFilter.types.filter(x => x !== t)
+          : [...state.eventFilter.types, t],
+      },
+    })),
+
+  toggleFilterLevel: (l) =>
+    set((state) => ({
+      eventFilter: {
+        ...state.eventFilter,
+        levels: state.eventFilter.levels.includes(l)
+          ? state.eventFilter.levels.filter(x => x !== l)
+          : [...state.eventFilter.levels, l],
+      },
+    })),
+
+  toggleFilterStatus: (s) =>
+    set((state) => ({
+      eventFilter: {
+        ...state.eventFilter,
+        statuses: state.eventFilter.statuses.includes(s)
+          ? state.eventFilter.statuses.filter(x => x !== s)
+          : [...state.eventFilter.statuses, s],
+      },
+    })),
+
+  resetEventFilter: () =>
+    set({ eventFilter: { types: [], levels: [], statuses: [] } }),
 }))
