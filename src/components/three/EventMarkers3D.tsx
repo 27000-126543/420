@@ -21,13 +21,19 @@ const typeLabels: Record<CityEvent['type'], string> = {
 export default function EventMarkers3D() {
   const events = useCityStore((s) => s.events)
   const setSelectedEvent = useCityStore((s) => s.setSelectedEvent)
+  const visibleLayers = useCityStore((s) => s.visibleLayers)
+  const permittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes())
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const ringsRef = useRef<THREE.Group>(null)
 
-  const activeEvents = useMemo(
-    () => events.filter((e) => e.status !== 'resolved'),
-    [events]
-  )
+  const eventsLayerVisible = visibleLayers.includes('events')
+
+  const activeEvents = useMemo(() => {
+    if (!eventsLayerVisible) return []
+    return events.filter(
+      (e) => e.status !== 'resolved' && permittedEventTypes.includes(e.type)
+    )
+  }, [events, eventsLayerVisible, permittedEventTypes])
 
   useFrame((state) => {
     if (!ringsRef.current) return

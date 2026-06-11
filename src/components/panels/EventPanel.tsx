@@ -1,23 +1,9 @@
 import { useState, useMemo } from 'react'
 import {
-  X,
-  AlertTriangle,
-  ChevronLeft,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertOctagon,
-  AlertCircle,
-  Minus,
-  MessageSquare,
-  MapPin,
-  User,
-  ThumbsUp,
-  ThumbsDown,
-  Flag,
+  X, AlertTriangle, ChevronLeft, Clock, CheckCircle2, XCircle, AlertOctagon, AlertCircle, Minus, MessageSquare, MapPin, User, ThumbsUp, ThumbsDown, Flag, ListOrdered, Wind, Zap, Shield, Link2, Eye,
 } from 'lucide-react'
 import { useCityStore } from '@/store/useCityStore'
-import type { CityEvent, EventStatus } from '@/types'
+import type { CityEvent, EventStatus, EventActionLog, EnvMetricKey } from '@/types'
 
 type FilterKey = 'all' | 'pending' | 'processing' | 'resolved'
 
@@ -66,23 +52,58 @@ const typeLabels: Record<CityEvent['type'], string> = {
   security: '安防',
 }
 
+const typeIcons: Record<CityEvent['type'], any> = {
+  traffic: AlertTriangle,
+  environment: Wind,
+  energy: Zap,
+  security: Shield,
+}
+
+const actionLogConfig: Record<EventActionLog['type'], { label: string; icon: any; color: string }> = {
+  created: { label: '事件创建', icon: Plus, color: 'text-cyber-blue' },
+  env_generated: { label: '环境告警生成', icon: Wind, color: 'text-cyber-purple' },
+  step_approved: { label: '审批通过', icon: CheckCircle2, color: 'text-cyber-green' },
+  step_rejected: { label: '审批退回', icon: XCircle, color: 'text-cyber-red' },
+  annotation_added: { label: '协同标注', icon: MessageSquare, color: 'text-cyber-blue' },
+  status_changed: { label: '状态变更', icon: Flag, color: 'text-cyber-orange' },
+}
+
+const metricLabels: Record<EnvMetricKey, string> = {
+  pm25: 'PM2.5',
+  aqi: 'AQI',
+  noise: '噪声',
+  waterQuality: '水质',
+}
+
+function Plus() {
+  return <span>+</span>
+}
+
 export default function EventPanel() {
   const setActivePanel = useCityStore((s) => s.setActivePanel)
   const events = useCityStore((s) => s.events)
   const selectedEvent = useCityStore((s) => s.selectedEvent)
   const setSelectedEvent = useCityStore((s) => s.setSelectedEvent)
-  const updateEventStatus = useCityStore((s) => s.updateEventStatus)
   const approveEventStep = useCityStore((s) => s.approveEventStep)
   const addEventAnnotation = useCityStore((s) => s.addEventAnnotation)
+  const getEffectivePermittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes)
   const currentUser = useCityStore((s) => s.currentUser)
+  const previewRole = useCityStore((s) => s.previewRole)
+
+  const permittedTypes = getEffectivePermittedEventTypes()
 
   const [filter, setFilter] = useState<FilterKey>('all')
   const [approvalComment, setApprovalComment] = useState('')
   const [annotationText, setAnnotationText] = useState('')
 
+  const typeFilteredEvents = useMemo(
+    () => events.filter(e => permittedTypes.includes(e.type)),
+    [events, permittedTypes]
+  )
+
   const filteredEvents = useMemo(
-    () => events.filter(filterMap[filter]).sort((a, b) => b.createdAt - a.createdAt),
-    [events, filter]
+    () => typeFilteredEvents.filter(filterMap[filter]).sort((a, b) => b.createdAt - a.createdAt),
+    [typeFilteredEvents, filter]
   )
 
   const selected = useMemo(
@@ -118,6 +139,21 @@ export default function EventPanel() {
     setAnnotationText('')
   }
 
+  const sortedActionLogs = useMemo(() => {
+    if (!selected) return []
+    const createdLog: EventActionLog = {
+      id: 'log-created',
+      type: selected.generatedFrom ? 'env_generated' : 'created',
+      timestamp: selected.createdAt,
+      userId: 'system',
+      userName: selected.generatedFrom ? '环境监测系统' : '系统自动检测',
+      description: selected.generatedFrom
+        ? `由环境告警自动生成（${metricLabels[selected.generatedFrom.metric]} ${selected.generatedFrom.value}）`
+        : `事件${selected.title}`,
+    }
+    return [createdLog, ...selected.actionLogs].sort((a, b) => a.timestamp - b.timestamp)
+  }, [selected])
+
   if (selected) {
     const lvlCfg = levelConfig[selected.level]
     const LevelIcon = lvlCfg.icon
@@ -127,8 +163,7 @@ export default function EventPanel() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSelectedEvent(null)}
-              className="text-cyber-muted hover:text-white transition-colors"
-            >
+              className="text-cyber-muted hover:text-white transition-colors">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <div className="flex items-center gap-2">
@@ -154,9 +189,16 @@ export default function EventPanel() {
                 <span className={`rounded border px-2 py-0.5 text-xs ${statusColors[selected.status]}`}>
                   {statusLabels[selected.status]}
                 </span>
-                <span className="rounded border border-cyber-border bg-cyber-bg/50 px-2 py-0.5 text-xs text-cyber-muted">
+                <span className="rounded border border-cyber-border bg-cyber-bg/50 px-2 py-0.5 text-xs text-cyber-muted flex items-center gap-1">
+                  {(() => { const TI = typeIcons[selected.type]; return <><TI className="h-3 w-3" /></> })()}
                   {typeLabels[selected.type]}
                 </span>
+                {previewRole && (
+                  <span className="flex items-center gap-0.5 rounded border border-yellow-500/40 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] text-yellow-500">
+                    <Eye className="h-2.5 w-2.5" />
+                    预览模式
+                  </span>
+                )}
               </div>
             </div>
             <div className="space-y-1.5 text-xs text-cyber-muted">
@@ -166,9 +208,32 @@ export default function EventPanel() {
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-3.5 w-3.5" />
-                <span>时间: {new Date(selected.createdAt).toLocaleString('zh-CN')}</span>
+                <span>创建时间: {new Date(selected.createdAt).toLocaleString('zh-CN')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ListOrdered className="h-3.5 w-3.5" />
+                <span>ID: {selected.id}</span>
               </div>
             </div>
+            {selected.generatedFrom && (
+              <div className="animate-fade-in mt-1 rounded border border-cyber-purple/40 bg-cyber-purple/5 p-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium text-cyber-purple">
+                  <Link2 className="h-3 w-3" />
+                  联动来源：环境监测系统
+                </div>
+                <div className="text-[10px] text-cyber-muted space-y-0.5">
+                  <div>
+                    区域编号：<span className="text-white">{selected.generatedFrom.regionId}</span>
+                  </div>
+                  <div>
+                    超标指标：<span className="text-white">{metricLabels[selected.generatedFrom.metric]}</span>
+                    <span className="ml-1 text-cyber-red font-mono">
+                      当前值 {selected.generatedFrom.value}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -194,8 +259,7 @@ export default function EventPanel() {
                               : isCurrent
                                 ? 'bg-cyber-blue/20 ring-2 ring-cyber-blue/40'
                                 : 'bg-cyber-muted/20'
-                        }`}
-                      >
+                        }`}>
                         <StepIcon
                           className={`h-4 w-4 ${
                             isDone
@@ -285,6 +349,60 @@ export default function EventPanel() {
 
           <div>
             <div className="mb-3 flex items-center gap-2">
+              <ListOrdered className="h-4 w-4 text-cyber-purple" />
+              <h3 className="font-medium text-white">
+                处置时间线 / 联动记录 ({sortedActionLogs.length})
+              </h3>
+            </div>
+            {sortedActionLogs.length === 0 ? (
+              <div className="rounded border border-dashed border-cyber-border py-6 text-center text-xs text-cyber-muted">
+                暂无联动记录
+              </div>
+            ) : (
+              <div className="relative space-y-0">
+                {sortedActionLogs.map((log, idx) => {
+                  const cfg = actionLogConfig[log.type]
+                  const LogIcon = cfg.icon
+                  const isLast = idx === sortedActionLogs.length - 1
+                  return (
+                    <div key={log.id} className="relative flex gap-3 pb-4">
+                      <div className="relative flex flex-col items-center">
+                        <div className="relative z-10 rounded-full p-0.5 bg-cyber-card/80 ring-1 ring-cyber-border">
+                          <LogIcon className={`h-3.5 w-3.5 ${cfg.color}`} />
+                        </div>
+                        {!isLast && (
+                          <div
+                            className="absolute top-6 w-px bg-cyber-border/70"
+                            style={{ height: 'calc(100% - 20px)' }}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-white flex items-center gap-1.5">
+                          <span className={`font-medium ${cfg.color}`}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-cyber-muted space-y-0.5">
+                          <div>{log.description}</div>
+                          <div className="flex items-center gap-1.5">
+                            <User className="h-2.5 w-2.5" />
+                            <span>{log.userName}</span>
+                            <span>·</span>
+                            <Clock className="h-2.5 w-2.5" />
+                            <span>{new Date(log.timestamp).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-cyber-green" />
               <h3 className="font-medium text-white">协同标注 ({selected.annotations.length})</h3>
             </div>
@@ -299,8 +417,7 @@ export default function EventPanel() {
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-xs font-medium text-cyber-blue">{a.userId}</span>
                       <span className="font-mono text-[10px] text-cyber-muted">
-                        {new Date(a.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                        {new Date(a.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <p className="text-xs text-white">{a.content}</p>
                   </div>
@@ -335,7 +452,15 @@ export default function EventPanel() {
       <div className="flex items-center justify-between border-b border-cyber-border p-4">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-cyber-orange" />
-          <h2 className="font-sans text-lg font-bold text-white">事件处置中心</h2>
+          <div>
+            <h2 className="font-sans text-lg font-bold text-white">事件处置中心</h2>
+            {previewRole && (
+              <p className="flex items-center gap-1 text-[10px] text-yellow-500">
+                <Eye className="h-3 w-3" />
+                预览模式 · 仅 {permittedTypes.map(t => typeLabels[t]).join(' / ')} 类型
+              </p>
+            )}
+          </div>
         </div>
         <button onClick={() => setActivePanel('none')} className="text-cyber-muted hover:text-white">
           <X className="h-5 w-5" />
@@ -344,23 +469,31 @@ export default function EventPanel() {
 
       <div className="border-b border-cyber-border px-4 py-2">
         <div className="flex gap-1 rounded bg-cyber-card/40 p-1">
-          {(Object.keys(filterLabels) as FilterKey[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => setFilter(k)}
-              className={`flex-1 rounded py-1 text-xs font-medium transition ${
-                filter === k
-                  ? 'bg-cyber-surface text-white shadow-sm'
-                  : 'text-cyber-muted hover:text-white'
-              }`}
-            >
-              {filterLabels[k]}
-              <span className="ml-1 text-[10px] opacity-70">
-                {events.filter(filterMap[k]).length}
-              </span>
-            </button>
-          ))}
+          {(Object.keys(filterLabels) as FilterKey[]).map((k) => {
+            const cnt = typeFilteredEvents.filter(filterMap[k]).length
+            return (
+              <button
+                key={k}
+                onClick={() => setFilter(k)}
+                className={`flex-1 rounded py-1 text-xs font-medium transition ${
+                  filter === k
+                    ? 'bg-cyber-surface text-white shadow-sm'
+                    : 'text-cyber-muted hover:text-white'
+                }`}
+              >
+                {filterLabels[k]}
+                <span className="ml-1 text-[10px] opacity-70">
+                  {cnt}
+                </span>
+              </button>
+            )
+          })}
         </div>
+        {permittedTypes.length < 4 && (
+          <div className="mt-1.5 text-[9px] text-cyber-muted">
+            可见事件类型：{permittedTypes.map(t => typeLabels[t]).join('、')} · 共 {typeFilteredEvents.length} 条
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -372,6 +505,7 @@ export default function EventPanel() {
           filteredEvents.map((e) => {
             const lvlCfg = levelConfig[e.level]
             const LevelIcon = lvlCfg.icon
+            const TypeIcon = typeIcons[e.type]
             return (
               <button
                 key={e.id}
@@ -390,12 +524,28 @@ export default function EventPanel() {
                       </span>
                     </div>
                     <div className="mb-1.5 flex items-center gap-2 text-[11px] text-cyber-muted">
-                      <span className="rounded bg-cyber-bg/60 px-1.5 py-0.5">{typeLabels[e.type]}</span>
+                      <span className="flex items-center gap-0.5 rounded bg-cyber-bg/60 px-1.5 py-0.5">
+                        <TypeIcon className="h-2.5 w-2.5" />
+                        {typeLabels[e.type]}
+                      </span>
                       <span className="rounded bg-cyber-bg/60 px-1.5 py-0.5 font-mono">{lvlCfg.label}</span>
+                      {e.generatedFrom && (
+                        <span className="flex items-center gap-0.5 rounded bg-cyber-purple/20 px-1.5 py-0.5 text-cyber-purple">
+                          <Wind className="h-2.5 w-2.5" />
+                          联动
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 text-[10px] text-cyber-muted">
                       <Clock className="h-3 w-3" />
                       <span>{new Date(e.createdAt).toLocaleString('zh-CN')}</span>
+                      {e.annotations.length > 0 && (
+                        <>
+                          <span>·</span>
+                          <MessageSquare className="h-2.5 w-2.5" />
+                          <span>{e.annotations.length}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

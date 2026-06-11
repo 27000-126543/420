@@ -7,6 +7,7 @@ import type {
   EnergyConsumption,
   CityEvent,
   Annotation,
+  EventActionLog,
 } from '@/types'
 import { useCityStore } from '@/store/useCityStore'
 
@@ -81,7 +82,18 @@ export function generateRoads(): TrafficFlow[] {
         speed: randInt(10, 80),
       })
     }
-    roads.push({ roadId: `road-v-${id++}`, segments: hsegments, trafficLights: [] })
+    const avgFlowH = hsegments.reduce((s, x) => s + x.flowIndex, 0) / (hsegments.length || 1)
+    const avgSpeedH = hsegments.reduce((s, x) => s + x.speed, 0) / (hsegments.length || 1)
+    const ridV = id++
+    roads.push({
+      id: `road-v-${ridV}`,
+      roadId: `road-v-${ridV}`,
+      roadName: `纵向大道 ${ridV}`,
+      flowIndex: Math.round(avgFlowH * 100) / 100,
+      speed: Math.round(avgSpeedH),
+      segments: hsegments,
+      trafficLights: [],
+    })
 
     const vsegments: TrafficFlow['segments'] = []
     for (let s = 0; s < segCount; s++) {
@@ -93,7 +105,18 @@ export function generateRoads(): TrafficFlow[] {
         speed: randInt(10, 80),
       })
     }
-    roads.push({ roadId: `road-h-${id++}`, segments: vsegments, trafficLights: [] })
+    const avgFlowV = vsegments.reduce((s, x) => s + x.flowIndex, 0) / (vsegments.length || 1)
+    const avgSpeedV = vsegments.reduce((s, x) => s + x.speed, 0) / (vsegments.length || 1)
+    const ridH = id++
+    roads.push({
+      id: `road-h-${ridH}`,
+      roadId: `road-h-${ridH}`,
+      roadName: `横向大道 ${ridH}`,
+      flowIndex: Math.round(avgFlowV * 100) / 100,
+      speed: Math.round(avgSpeedV),
+      segments: vsegments,
+      trafficLights: [],
+    })
   }
   return roads
 }
@@ -114,12 +137,14 @@ export function generateTrafficLights(): TrafficLight[] {
       else if (phase === 'yellow') remaining = yellowDur
       else remaining = redDur
       lights.push({
-        id: `tl-${id++}`,
+        id: `tl-${id}`,
+        intersectionName: `路口 G${gx >= 0 ? '' : '-'}${Math.abs(gx)}-G${gz >= 0 ? '' : '-'}${Math.abs(gz)}`,
         location: [gx * 100, 4, gz * 100],
         currentPhase: phase,
         remainingSeconds: remaining,
         schedule: { green: greenDur, yellow: yellowDur, red: redDur },
       })
+      id++
     }
   }
   return lights
@@ -174,8 +199,13 @@ export function generateEnvironmentRegions(): EnvironmentRegion[] {
         intensity: alertLevel === 'critical' ? randFloat(0.6, 1) : alertLevel === 'warning' ? randFloat(0.3, 0.7) : randFloat(0, 0.4),
       })
     }
+    const districts = ['浦东新区', '黄浦区', '静安区', '徐汇区', '长宁区', '普陀区', '虹口区', '杨浦区']
+    const streets = ['陆家嘴街道', '花木街道', '外滩街道', '南京西路街道', '徐家汇街道', '虹桥街道', '长寿路街道', '五角场街道']
+    const rid = id++
     regions.push({
-      regionId: `env-${id++}`,
+      regionId: `env-${rid}`,
+      district: districts[(rid - 1) % districts.length],
+      street: streets[(rid - 1) % streets.length],
       metrics: {
         pm25: alertLevel === 'critical' ? randInt(150, 300) : alertLevel === 'warning' ? randInt(75, 150) : randInt(10, 75),
         aqi: alertLevel === 'critical' ? randInt(200, 500) : alertLevel === 'warning' ? randInt(100, 200) : randInt(20, 100),
@@ -292,6 +322,18 @@ export function generateEvents(buildings: BuildingData[]): CityEvent[] {
       createdAt: Date.now() - randInt(600000, 172800000),
       steps,
       annotations: [],
+      actionLogs: stepStatuses.flatMap<EventActionLog>((s, idx) => {
+        if (s.st === 'pending') return []
+        const logType: 'step_approved' | 'step_rejected' = s.st === 'approved' || s.st === 'done' ? 'step_approved' : 'step_rejected'
+        return [{
+          id: `log-mock-${id}-${idx}`,
+          type: logType,
+          timestamp: s.ts ?? Date.now(),
+          userId: `user-${idx}`,
+          userName: assigneeNames[idx],
+          description: `${logType === 'step_approved' ? '审批通过' : '审批退回'}：${actionNames[idx]}`,
+        }]
+      }),
     })
   }
   return events

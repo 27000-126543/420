@@ -14,7 +14,7 @@ import { initMockData, startMockDataStream } from '@/data/mockData'
 
 export default function Home() {
   const activePanel = useCityStore((s) => s.activePanel)
-  const currentUser = useCityStore((s) => s.currentUser)
+  const getEffectivePermittedLayers = useCityStore((s) => s.getEffectivePermittedLayers)
   const initialized = useRef(false)
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function Home() {
   }, [])
 
   const renderPanel = () => {
-    const perms = currentUser.permittedLayers as string[]
+    const perms = getEffectivePermittedLayers() as string[]
     const panelToLayer: Record<string, string | null> = {
       traffic: 'traffic',
       environment: 'environment',

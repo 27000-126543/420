@@ -20,12 +20,17 @@ export interface TrafficLight {
   currentPhase: 'red' | 'yellow' | 'green'
   remainingSeconds: number
   schedule: { green: number; yellow: number; red: number }
+  intersectionName?: string
 }
 
 export interface TrafficFlow {
+  id: string
   roadId: string
-  segments: TrafficSegment[]
-  trafficLights: TrafficLight[]
+  roadName: string
+  flowIndex: number
+  speed: number
+  segments?: TrafficSegment[]
+  trafficLights?: TrafficLight[]
 }
 
 export interface EnvironmentMetrics {
@@ -42,6 +47,8 @@ export interface HeatmapPoint {
 
 export interface EnvironmentRegion {
   regionId: string
+  district?: string
+  street?: string
   metrics: EnvironmentMetrics
   heatmapPoints: HeatmapPoint[]
   alertLevel: 'normal' | 'warning' | 'critical'
@@ -71,7 +78,35 @@ export interface Annotation {
   timestamp: number
 }
 
+export type EnvMetricKey = 'pm25' | 'aqi' | 'noise' | 'waterQuality'
+
 export type EventStatus = 'detected' | 'reported' | 'assigned' | 'processing' | 'resolved' | 'returned'
+
+export interface TrafficLightSchedulePreset {
+  id: string
+  name: string
+  description: string
+  schedule: { green: number; yellow: number; red: number }
+  icon: string
+}
+
+export type EventActionType = 
+  | 'created' 
+  | 'env_generated'
+  | 'step_approved' 
+  | 'step_rejected' 
+  | 'annotation_added' 
+  | 'status_changed'
+
+export interface EventActionLog {
+  id: string
+  type: EventActionType
+  timestamp: number
+  userId: string
+  userName: string
+  description: string
+  metadata?: Record<string, any>
+}
 
 export interface CityEvent {
   id: string
@@ -84,6 +119,12 @@ export interface CityEvent {
   steps: EventStep[]
   annotations: Annotation[]
   returnedFromStep?: number
+  actionLogs: EventActionLog[]
+  generatedFrom?: {
+    regionId: string
+    metric: EnvMetricKey
+    value: number
+  }
 }
 
 export interface BuildingData {
@@ -106,6 +147,7 @@ export interface UserData {
   street?: string
   enterprise?: string
   permittedLayers: string[]
+  permittedEventTypes: ('traffic' | 'environment' | 'energy' | 'security')[]
 }
 
 export type LayerKey = 'traffic' | 'environment' | 'energy' | 'sensors' | 'events' | 'annotations'

@@ -1,8 +1,8 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { useCityStore, type EnvMetricKey } from '@/store/useCityStore'
-import type { EnvironmentRegion } from '@/types'
+import { useCityStore } from '@/store/useCityStore'
+import type { EnvironmentRegion, EnvMetricKey } from '@/types'
 
 const dummy = new THREE.Object3D()
 const tempColor = new THREE.Color()

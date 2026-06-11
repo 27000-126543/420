@@ -14,13 +14,18 @@ const layers: { key: LayerKey; label: string; icon: React.ElementType }[] = [
 export default function LayerToggle() {
   const visibleLayers = useCityStore((s) => s.visibleLayers)
   const toggleLayer = useCityStore((s) => s.toggleLayer)
-  const currentUser = useCityStore((s) => s.currentUser)
-  const permittedLayers = currentUser.permittedLayers as LayerKey[]
+  const previewRole = useCityStore((s) => s.previewRole)
+  const permittedLayers = useCityStore((s) => s.getEffectivePermittedLayers())
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="mb-1 text-xs font-medium uppercase tracking-wider text-cyber-muted">
+      <span className="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-cyber-muted">
         图层控制
+        {previewRole && (
+          <span className="rounded bg-yellow-500/10 px-1 py-0.5 font-mono text-[9px] normal-case text-yellow-400">
+            预览中
+          </span>
+        )}
       </span>
       {layers.map(({ key, label, icon: Icon }) => {
         const isActive = visibleLayers.includes(key)
