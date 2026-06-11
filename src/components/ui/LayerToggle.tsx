@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Car, Trees, Zap, Wifi, AlertTriangle, Tag } from 'lucide-react'
 import { useCityStore } from '@/store/useCityStore'
 import type { LayerKey } from '@/types'
@@ -15,7 +16,15 @@ export default function LayerToggle() {
   const visibleLayers = useCityStore((s) => s.visibleLayers)
   const toggleLayer = useCityStore((s) => s.toggleLayer)
   const previewRole = useCityStore((s) => s.previewRole)
-  const permittedLayers = useCityStore((s) => s.getEffectivePermittedLayers())
+  const currentUserRole = useCityStore((s) => s.currentUser.role)
+  const roleLayerPerms = useCityStore((s) => s.roleLayerPerms)
+  const getEffectivePermittedLayers = useCityStore((s) => s.getEffectivePermittedLayers)
+  const permittedLayers = useMemo(() => getEffectivePermittedLayers(), [
+    getEffectivePermittedLayers,
+    previewRole,
+    currentUserRole,
+    roleLayerPerms,
+  ])
 
   return (
     <div className="flex flex-col gap-1.5">

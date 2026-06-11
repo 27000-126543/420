@@ -394,10 +394,17 @@ export const useCityStore = create<CityState>((set, get) => ({
     set((state) => {
       const newPerms = { ...state.roleEventTypePerms, [roleKey]: types }
       let patch: Partial<CityState> = { roleEventTypePerms: newPerms }
+      const affected = (state.previewRole === roleKey) || (state.currentUser.role === roleKey && !state.previewRole)
       if (state.currentUser.role === roleKey && !state.previewRole) {
         patch = {
           ...patch,
           currentUser: { ...state.currentUser, permittedEventTypes: types },
+        }
+      }
+      if (affected && state.selectedEvent) {
+        const ev = state.events.find(e => e.id === state.selectedEvent)
+        if (ev && !types.includes(ev.type)) {
+          patch.selectedEvent = null
         }
       }
       return patch
@@ -408,16 +415,33 @@ export const useCityStore = create<CityState>((set, get) => ({
   setPreviewRole: (role) =>
     set((state) => {
       if (role === null) {
-        return {
+        const actualPerms = state.roleLayerPerms[state.currentUser.role] ?? state.currentUser.permittedLayers
+        let patch: Partial<CityState> = {
           previewRole: null,
-          visibleLayers: state.visibleLayers.filter((l) => state.currentUser.permittedLayers.includes(l)),
+          visibleLayers: state.visibleLayers.filter((l) => actualPerms.includes(l)),
+        }
+        const actualEventTypes = state.roleEventTypePerms[state.currentUser.role] ?? state.currentUser.permittedEventTypes
+        if (state.selectedEvent) {
+          const ev = state.events.find(e => e.id === state.selectedEvent)
+          if (ev && !actualEventTypes.includes(ev.type)) {
+            patch.selectedEvent = null
+          }
+        }
+        return patch
+      }
+      const perms = state.roleLayerPerms[role] ?? makeDefaultUser(role).permittedLayers
+      let patch: Partial<CityState> = {
+        previewRole: role,
+        visibleLayers: state.visibleLayers.filter((l) => perms.includes(l)),
+      }
+      const eventTypes = state.roleEventTypePerms[role] ?? makeDefaultUser(role).permittedEventTypes
+      if (state.selectedEvent) {
+        const ev = state.events.find(e => e.id === state.selectedEvent)
+        if (ev && !eventTypes.includes(ev.type)) {
+          patch.selectedEvent = null
         }
       }
-      const previewUser = makeDefaultUser(role)
-      return {
-        previewRole: role,
-        visibleLayers: state.visibleLayers.filter((l) => previewUser.permittedLayers.includes(l)),
-      }
+      return patch
     }),
 
   generateEventFromEnvAlert: (regionId, metric) => {

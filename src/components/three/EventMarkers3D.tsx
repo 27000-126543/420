@@ -22,7 +22,16 @@ export default function EventMarkers3D() {
   const events = useCityStore((s) => s.events)
   const setSelectedEvent = useCityStore((s) => s.setSelectedEvent)
   const visibleLayers = useCityStore((s) => s.visibleLayers)
-  const permittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes())
+  const previewRole = useCityStore((s) => s.previewRole)
+  const currentUserRole = useCityStore((s) => s.currentUser.role)
+  const roleEventTypePerms = useCityStore((s) => s.roleEventTypePerms)
+  const getEffectivePermittedEventTypes = useCityStore((s) => s.getEffectivePermittedEventTypes)
+  const permittedEventTypes = useMemo(() => getEffectivePermittedEventTypes(), [
+    getEffectivePermittedEventTypes,
+    previewRole,
+    currentUserRole,
+    roleEventTypePerms,
+  ])
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const ringsRef = useRef<THREE.Group>(null)
 

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
@@ -22,6 +23,19 @@ function Ground() {
 
 function SceneContent() {
   const visibleLayers = useCityStore((s) => s.visibleLayers)
+  const previewRole = useCityStore((s) => s.previewRole)
+  const currentUserRole = useCityStore((s) => s.currentUser.role)
+  const roleLayerPerms = useCityStore((s) => s.roleLayerPerms)
+  const getEffectivePermittedLayers = useCityStore((s) => s.getEffectivePermittedLayers)
+  const permittedLayers = useMemo(() => getEffectivePermittedLayers(), [
+    getEffectivePermittedLayers,
+    previewRole,
+    currentUserRole,
+    roleLayerPerms,
+  ])
+
+  const isLayerOn = (k: typeof permittedLayers[number]) =>
+    visibleLayers.includes(k) && permittedLayers.includes(k)
 
   return (
     <>
@@ -31,17 +45,17 @@ function SceneContent() {
       <Stars radius={2000} depth={100} count={4000} factor={4} saturation={0.5} fade speed={1} />
       <Ground />
       <Buildings />
-      {visibleLayers.includes('traffic') && (
+      {isLayerOn('traffic') && (
         <>
           <Roads />
           <TrafficLights3D />
         </>
       )}
-      {visibleLayers.includes('sensors') && <SensorMarkers />}
-      {visibleLayers.includes('environment') && <EnvironmentHeatmap />}
-      {visibleLayers.includes('energy') && <EnergyMarkers />}
-      {visibleLayers.includes('events') && <EventMarkers3D />}
-      {visibleLayers.includes('annotations') && <AnnotationMarkers />}
+      {isLayerOn('sensors') && <SensorMarkers />}
+      {isLayerOn('environment') && <EnvironmentHeatmap />}
+      {isLayerOn('energy') && <EnergyMarkers />}
+      {isLayerOn('events') && <EventMarkers3D />}
+      {isLayerOn('annotations') && <AnnotationMarkers />}
       <OrbitControls
         minDistance={50}
         maxDistance={5000}

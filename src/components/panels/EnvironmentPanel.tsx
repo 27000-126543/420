@@ -92,7 +92,8 @@ export default function EnvironmentPanel() {
     if (!hasEventsLayer) toggleLayer('events' as LayerKey)
     const evt = generateEventFromEnvAlert(regionId, activeMetric)
     if (evt) {
-      setTimeout(() => setSelectedEvent(evt.id), 50)
+      setSelectedEvent(evt.id)
+      setActivePanel('events')
     }
   }
 

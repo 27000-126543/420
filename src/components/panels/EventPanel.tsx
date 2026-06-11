@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   X, AlertTriangle, ChevronLeft, Clock, CheckCircle2, XCircle, AlertOctagon, AlertCircle, Minus, MessageSquare, MapPin, User, ThumbsUp, ThumbsDown, Flag, ListOrdered, Wind, Zap, Shield, Link2, Eye,
 } from 'lucide-react'
@@ -107,9 +107,15 @@ export default function EventPanel() {
   )
 
   const selected = useMemo(
-    () => events.find((e) => e.id === selectedEvent),
-    [events, selectedEvent]
+    () => typeFilteredEvents.find((e) => e.id === selectedEvent),
+    [typeFilteredEvents, selectedEvent]
   )
+
+  useEffect(() => {
+    if (selectedEvent && !typeFilteredEvents.some(e => e.id === selectedEvent)) {
+      setSelectedEvent(null)
+    }
+  }, [selectedEvent, typeFilteredEvents, setSelectedEvent])
 
   const currentStepIndex = useMemo(() => {
     if (!selected) return -1
@@ -141,17 +147,38 @@ export default function EventPanel() {
 
   const sortedActionLogs = useMemo(() => {
     if (!selected) return []
-    const createdLog: EventActionLog = {
-      id: 'log-created',
-      type: selected.generatedFrom ? 'env_generated' : 'created',
-      timestamp: selected.createdAt,
-      userId: 'system',
-      userName: selected.generatedFrom ? '环境监测系统' : '系统自动检测',
-      description: selected.generatedFrom
-        ? `由环境告警自动生成（${metricLabels[selected.generatedFrom.metric]} ${selected.generatedFrom.value}）`
-        : `事件${selected.title}`,
+    const seen = new Set<string>()
+    const all: EventActionLog[] = []
+    const pushUnique = (log: EventActionLog) => {
+      const key = `${log.type}-${log.timestamp}-${log.description}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        all.push(log)
+      }
     }
-    return [createdLog, ...selected.actionLogs].sort((a, b) => a.timestamp - b.timestamp)
+    const hasEnvGenerated = selected.actionLogs.some(l => l.type === 'env_generated')
+    const hasCreated = selected.actionLogs.some(l => l.type === 'created')
+    if (selected.generatedFrom && !hasEnvGenerated) {
+      pushUnique({
+        id: 'log-created',
+        type: 'env_generated',
+        timestamp: selected.createdAt,
+        userId: 'system',
+        userName: '环境监测系统',
+        description: `由环境告警自动生成（${metricLabels[selected.generatedFrom.metric]} ${selected.generatedFrom.value}）`,
+      })
+    } else if (!selected.generatedFrom && !hasCreated) {
+      pushUnique({
+        id: 'log-created',
+        type: 'created',
+        timestamp: selected.createdAt,
+        userId: 'system',
+        userName: '系统自动检测',
+        description: `事件${selected.title}`,
+      })
+    }
+    selected.actionLogs.forEach(pushUnique)
+    return all.sort((a, b) => a.timestamp - b.timestamp)
   }, [selected])
 
   if (selected) {

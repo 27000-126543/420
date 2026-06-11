@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Activity, Wind, Zap, AlertTriangle, Shield, Bell, Diamond, X, Eye } from 'lucide-react'
 import { useCityStore } from '@/store/useCityStore'
 import type { PanelType, LayerKey } from '@/types'
@@ -24,7 +25,17 @@ export default function TopNav() {
   const currentUser = useCityStore((s) => s.currentUser)
   const previewRole = useCityStore((s) => s.previewRole)
   const setPreviewRole = useCityStore((s) => s.setPreviewRole)
-  const effectiveUser = useCityStore((s) => s.getEffectiveUser())
+  const roleLayerPerms = useCityStore((s) => s.roleLayerPerms)
+  const roleEventTypePerms = useCityStore((s) => s.roleEventTypePerms)
+  const getEffectiveUser = useCityStore((s) => s.getEffectiveUser)
+
+  const effectiveUser = useMemo(() => getEffectiveUser(), [
+    getEffectiveUser,
+    previewRole,
+    currentUser.role,
+    roleLayerPerms,
+    roleEventTypePerms,
+  ])
 
   const permittedLayers = effectiveUser.permittedLayers as LayerKey[]
   const visibleTabs = tabs.filter((t) => !t.layer || permittedLayers.includes(t.layer))
